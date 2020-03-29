@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+      integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+      crossorigin="anonymous"
+    />
+    <script type="text/javascript">
+      let fetchedData = {};
+      let totals = {};
+
+      const fetchData = () =>
+        fetch(
+          "https://raw.githubusercontent.com/BlankerL/DXY-COVID-19-Data/master/json/DXYArea.json"
+        )
+          .then(q => q.json())
+          .then(res => res.results);
+
+      const printTable = (items, orderBy, orderAscDesc) => {
+        document
+          .getElementById("covid-table")
+          .getElementsByTagName("tbody")[0].innerHTML = "";
+
+        const elements = items.sort((a, b) => {
+          const aa = orderAscDesc == "desc" ? b : a;
+          const bb = orderAscDesc == "desc" ? a : b;
+
+          return aa[orderBy] - bb[orderBy];
+        });
+        const tableRef = document
+          .getElementById("covid-table")
+          .getElementsByTagName("tbody")[0];
+
+        let idx = 1;
+        elements.forEach(element => {
+          if (!element.countryEnglishName) return;
+          if (
+            element.countryEnglishName === "China" &&
+            element.provinceEnglishName !== "China"
+          )
+            return;
+          const newRow = tableRef.insertRow(tableRef.rows.length);
+          newRow.innerHTML = createTr(element, idx++);
+        });
+      };
+      const createTr = (element, idx) => {
+        return `
+          <tr>
+            <th scope="row">${idx}</th>
+            <td title="Last update on: ${new Date(element.updateTime)}">${
+          element.countryEnglishName
+        }</td>
+            <td class="text-right">${element.confirmedCount.toLocaleString()}</td>
+            <td class="text-right">${element.deadCount.toLocaleString()}</td>
+            <td class="text-right">${element.curedCount.toLocaleString()}</td>
+            <td class="text-right">${element.deathRate.toLocaleString()}</td>
+            <td class="text-right">${
+              element.adjustedTotalCases > 0
+                ? element.adjustedTotalCases.toLocaleString()
+                : "-"
+            }</td>
+          </tr>`;
+      };
+      const printSelect = (items, orderBy, orderAscDesc) => {
+        const elements = items.sort((a, b) => {
+          const aa = orderAscDesc == "desc" ? b : a;
+          const bb = orderAscDesc == "desc" ? a : b;
+
+          return aa[orderBy] - bb[orderBy];
+        });
+        const select = document.getElementById("country-death-rate");
+
+        elements.forEach(element => {
+          if (!element.countryEnglishName) return;
+          if (
+            element.countryEnglishName === "China" &&
+            element.provinceEnglishName !== "China"
+          )
+            return;
+          if (element.deathRate == 0) return;
+
+          select.options[select.options.length] = new Option(
+            `${
+              element.countryEnglishName
+            } -> ${element.deathRate.toLocaleString()}`,
+            element.countryEnglishName
+          );
+        });
+      };
+      const printTotals = totals => {
+        document.getElementById(
+          "global-total"
+        ).innerText = totals.confirmedCount.toLocaleString();
+        document.getElementById(
+          "global-deaths"
+        ).innerText = totals.deadCount.toLocaleString();
+        document.getElementById(
+          "global-recovered"
+        ).innerText = totals.curedCount.toLocaleString();
+        document.getElementById(
+          "global-death-rate"
+        ).innerText = totals.deathRate.toLocaleString();
+        document.getElementById("global-active").innerText = (
+          totals.confirmedCount -
+          totals.deadCount -
+          totals.curedCount
+        ).toLocaleString();
+
+        document.getElementById("global-adjusted-total").innerText =
+          totals.adjustedTotalCases > 0
+            ? totals.adjustedTotalCases.toLocaleString()
+            : "-";
+      };
+      const injectMoreData = (elements, compareTo) => {
+        let comparer = null;
+
+        if (typeof compareTo == "string") {
+          comparer = elements.find(q => q.countryEnglishName == compareTo);
+        } else if (typeof compareTo == "number") {
+          comparer = {
+            deathRate: compareTo
+          };
+        }
+
+        totals.adjustedTotalCases = 0;
+
+        elements.forEach((item, idx) => {
+          const adjustedValue =
+            comparer == null || item.deathRate < comparer.deathRate
+              ? 0
+              : Math.round(
+                  (item.confirmedCount * item.deathRate) / comparer.deathRate
+                );
+
+          elements[idx] = {
+            ...item,
+            deathRate: ((item.deadCount / item.confirmedCount) * 100).toFixed(
+              2
+            ),
+            adjustedTotalCases: adjustedValue
+          };
+
+          totals.adjustedTotalCases +=
+            adjustedValue == 0 ? item.confirmedCount : adjustedValue;
+        });
+
+        return elements;
+      };
+
+      let orderBy = "confirmedCount";
+      let orderAscDesc = "desc";
+
+      fetchData().then(elements => {
+        fetchedData = injectMoreData(elements);
+        totals = fetchedData.reduce(
+          (a, b) => {
+            const current = {
+              confirmedCount: a.confirmedCount,
+              deadCount: a.deadCount,
+              curedCount: a.curedCount
+            };
+
+            if (!b.countryEnglishName) current;
+            if (
+              b.countryEnglishName === "China" &&
+              b.provinceEnglishName !== "China"
+            )
+              return current;
+
+            return {
+              confirmedCount: current.confirmedCount + b.confirmedCount,
+              deadCount: current.deadCount + b.deadCount,
+              curedCount: current.curedCount + b.curedCount
+            };
+          },
+          {
+            confirmedCount: 0,
+            deadCount: 0,
+            curedCount: 0
+          }
+        );
+        totals.deathRate = (
+          (totals.deadCount / totals.confirmedCount) *
+          100
+        ).toFixed(2);
+
+        printTable(fetchedData, orderBy, orderAscDesc);
+        printSelect(fetchedData, "deathRate", "asc");
+        printTotals(totals);
+
+        document
+          .getElementById("country-death-rate")
+          .addEventListener("change", e => {
+            fetchedData = injectMoreData(fetchedData, e.target.value);
+
+            printTable(fetchedData, "adjustedTotalCases", "desc");
+            printTotals(totals);
+          });
+
+        document
+          .getElementById("custom-death-rate")
+          .addEventListener("change", e => {
+            fetchedData = injectMoreData(fetchedData, Number(e.target.value));
+
+            printTable(fetchedData, "adjustedTotalCases", "desc");
+            printTotals(totals);
+          });
+        document.querySelectorAll(".orderMe").forEach(elm => {
+          elm.addEventListener("click", e => {
+            e.preventDefault();
+            orderBy = e.target.getAttribute("data-field");
+            orderAscDesc = orderAscDesc == "desc" ? "asc" : "desc";
+
+            printTable(fetchedData, orderBy, orderAscDesc);
+          });
+        });
+      });
+    </script>
+    <title>COVID-19 Adjustment</title>
+  </head>
+  <body>
+    <div
+      class="d-flex flex-column flex-md-row align-items-center p-3 px-md-4 mb-3 bg-white border-bottom shadow-sm"
+    >
+      <h5 class="my-0 mr-md-auto font-weight-normal">COVID-19 Adjustment</h5>
+      <nav class="my-2 my-md-0 mr-md-3">
+        <a class="p-2 text-dark" href="#">About</a>
+      </nav>
+    </div>
+    <div class="container">
+      <div class="row">
+        <div class="col-12">
+          <h2>Global numbers</h2>
+        </div>
+        <div class="col-lg-3 mt-3 col-12">
+          <div class="card text-white bg-primary">
+            <div class="card-header">Total cases</div>
+            <div class="card-body text-center">
+              <h1 id="global-total"></h1>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 mt-3 col-12">
+          <div class="card text-white bg-danger">
+            <div class="card-header">
+              Total deaths (rate: <strong id="global-death-rate"></strong> %)
+            </div>
+            <div class="card-body text-center">
+              <h1 id="global-deaths"></h1>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 mt-3 col-12">
+          <div class="card text-white bg-success">
+            <div class="card-header">Total recovered</div>
+            <div class="card-body text-center">
+              <h1 id="global-recovered"></h1>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 mt-3 col-12">
+          <div class="card text-white bg-warning">
+            <div class="card-header">Total active case</div>
+            <div class="card-body text-center">
+              <h1 id="global-active"></h1>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 mt-3">
+          <div class="card text-white bg-dark">
+            <div class="card-header">Adjusted total Cases</div>
+            <div class="card-body">
+              <div class="card-body text-center">
+                <h1 id="global-adjusted-total"></h1>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row mt-5">
+        <div class="col-12">
+          <p>
+            Adjust the total case based on the death rate of:
+            <select id="country-death-rate">
+              <option value="">-- select --</option>
+            </select>
+            or specify the death rate:
+            <input type="number" id="custom-death-rate" step="0.1" />
+          </p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table id="covid-table" class="table table-striped">
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Country</th>
+              <th scope="col">
+                <a href="#" class="orderMe" data-field="confirmedCount"
+                  >Total Cases</a
+                >
+              </th>
+              <th scope="col text-center">
+                <a href="#" class="orderMe" data-field="deadCount">Deaths</a>
+              </th>
+              <th scope="col text-center">
+                <a href="#" class="orderMe" data-field="curedCount"
+                  >Recovered</a
+                >
+              </th>
+              <th scope="col text-center">
+                <a href="#" class="orderMe" data-field="deathRate"
+                  >Death Rate (%)</a
+                >
+              </th>
+              <th scope="col text-center">
+                <a href="#" class="orderMe" data-field="adjustedTotalCases"
+                  >Adjusted Total</a
+                >
+              </th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>
