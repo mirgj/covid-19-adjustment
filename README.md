@@ -18,4 +18,4 @@ Nothing fancy has been used. Just pure HTML, vanilla JavaScript and [bootstrap](
 
 ## Where to find it
 
-You can find it in the file in the [docs](docs/) folder or at this link.
+You can find it in the file in the [docs](docs/) folder or at [this link](https://mirgj.github.io/covid-19-adjustment/index.html).
